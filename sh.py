@@ -46,6 +46,7 @@ from types import ModuleType
 from functools import partial
 import inspect
 import time as _time
+import pwd
 
 from locale import getpreferredencoding
 DEFAULT_ENCODING = getpreferredencoding() or "utf-8"
@@ -472,6 +473,10 @@ class Command(object):
         # the output is being T'd to both the redirected destination and our
         # internal buffers
         "tee": None,
+
+        # UID to set after forking. Requires root privileges. Not supported on
+        # Windows.
+        "uid": None,
     }
     
     # these are arguments that cannot be called together, because they wouldn't
@@ -746,6 +751,18 @@ class OProc(object):
 
         self.call_args = call_args
 
+        if self.call_args['uid'] is not None:
+            if os.getuid() != 0:
+                raise RuntimeError('UID setting requires root privileges')
+
+            self.call_args["tty_in"] = False
+            self.call_args["tty_out"] = False
+
+            target_uid = self.call_args['uid']
+
+            pwrec = pwd.getpwuid(self.call_args['uid'])
+            target_gid = pwrec.pw_gid
+
         self._single_tty = self.call_args["tty_in"] and self.call_args["tty_out"]
 
         # this logic is a little convoluted, but basically this top-level
@@ -781,7 +798,7 @@ class OProc(object):
             # by the time the process exits, and the data will be lost.
             # i've only seen this on OSX.
             if stderr is not STDOUT:
-                self._stderr_fd, self._slave_stderr_fd = os.pipe()
+                self._stderr_fd, self._slave_stderr_fd = os.pipe()                
             
         gc_enabled = gc.isenabled()
         if gc_enabled: gc.disable()
@@ -797,6 +814,10 @@ class OProc(object):
             if IS_OSX and IS_PY3: _time.sleep(0.01)
             
             os.setsid()
+
+            if call_args['uid'] is not None:
+                os.setgid(target_gid)
+                os.setuid(target_uid)
             
             if self.call_args["tty_out"]:
                 # set raw mode, so there isn't any weird translation of newlines
