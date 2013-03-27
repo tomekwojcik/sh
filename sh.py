@@ -755,8 +755,8 @@ class OProc(object):
             if os.getuid() != 0:
                 raise RuntimeError('UID setting requires root privileges')
 
-            self.call_args["tty_in"] = False
-            self.call_args["tty_out"] = False
+            # self.call_args["tty_in"] = False
+            # self.call_args["tty_out"] = False
 
             target_uid = self.call_args['uid']
 
@@ -814,10 +814,6 @@ class OProc(object):
             if IS_OSX and IS_PY3: _time.sleep(0.01)
             
             os.setsid()
-
-            if call_args['uid'] is not None:
-                os.setgid(target_gid)
-                os.setuid(target_uid)
             
             if self.call_args["tty_out"]:
                 # set raw mode, so there isn't any weird translation of newlines
@@ -858,6 +854,10 @@ class OProc(object):
 
             if self.call_args["tty_out"]:
                 self.setwinsize(1)
+
+            if call_args['uid'] is not None:
+                os.setgid(target_gid)
+                os.setuid(target_uid)
             
             # actually execute the process
             if self.call_args["env"] is None: os.execv(cmd[0], cmd)
